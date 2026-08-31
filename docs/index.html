@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MLB Edge Lab</title>
+<meta name="description" content="Automatic MLB betting model: simulated slate, edges, run lines, totals, first five, power ratings and a graded shadow book.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>MLB EDGE LAB</h1>
+      <span class="sub" id="seasonTag"></span>
+    </div>
+    <div class="datenav">
+      <button id="prev" title="Previous day">◀</button>
+      <span class="cur" id="curDate">—</span>
+      <button id="next" title="Next day">▶</button>
+      <button id="today">Today</button>
+    </div>
+    <div class="stamp" id="stamp">loading…</div>
+  </header>
+
+  <div class="kpis" id="kpis"></div>
+  <section class="stakingbar" id="stakingControls" aria-label="Staking settings"></section>
+  <nav class="tabs" id="tabs"></nav>
+  <div id="view"><div class="empty">Loading slate…</div></div>
+
+  <footer>
+    Simulated <span id="nsims">20,000</span> times per game at the plate-appearance level.
+    Data: MLB Stats API (schedule, starters, lineups, stats, standings), ESPN (prices),
+    Open-Meteo (weather). Model output only — not advice, and nothing here is a guarantee.
+  </footer>
+</div>
+<script src="schedule.js"></script>
+<script src="sim.js"></script>
+<script src="staking.js"></script>
+<script src="ledger.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

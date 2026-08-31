@@ -1,0 +1,21 @@
+{
+  "_README": [
+    "Optional, and entirely keyless - this is where you paste prices no free feed carries.",
+    "Key each entry by gamePk (shown on the game card). Anything you leave out is skipped;",
+    "the model still publishes its own fair line for every market below either way.",
+    "",
+    "  f5          first five innings: moneyline both sides, and/or a total",
+    "  nrfi        no run in the first inning: yes and no prices",
+    "  team_totals per-team run totals, keyed by team abbreviation",
+    "",
+    "Delete the example or leave it - unknown gamePks are ignored."
+  ],
+  "_example_823746": {
+    "f5":   { "ml_away": 105, "ml_home": -125, "total": 4.5, "over": -115, "under": -105, "book": "DraftKings" },
+    "nrfi": { "yes": -135, "no": 110, "book": "DraftKings" },
+    "team_totals": {
+      "MIL": { "line": 4.5, "over": -115, "under": -105, "book": "FanDuel" },
+      "ATL": { "line": 3.5, "over": 100,  "under": -120, "book": "FanDuel" }
+    }
+  }
+}

@@ -1,0 +1,3 @@
+The build writes slate-YYYY-MM-DD.json, latest.json, ratings.json,
+results.json, performance.json and index.json here. Ships empty on purpose -
+the first workflow run fills it with live data rather than sample numbers.

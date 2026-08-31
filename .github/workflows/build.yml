@@ -1,0 +1,155 @@
+name: Build MLB slate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build.yml"
+      - "pipeline/**"
+      - "docs/*.html"
+      - "docs/*.css"
+      - "docs/*.js"
+      - "tests/**"
+      - "requirements.txt"
+  schedule:
+    # UTC. Covers the whole MLB day: morning card, midday line moves, the
+    # window when lineups post, first pitch, late west-coast games, and an
+    # overnight pass that grades everything that finished.
+    - cron: "0 11 * * *"    #  7:00 AM ET  - first build of the day
+    - cron: "0 15 * * *"    # 11:00 AM ET
+    - cron: "0 18 * * *"    #  2:00 PM ET
+    - cron: "30 20 * * *"   #  4:30 PM ET  - lineups start posting
+    - cron: "0 22 * * *"    #  6:00 PM ET  - close to first pitch
+    - cron: "30 23 * * *"   #  7:30 PM ET
+    - cron: "0 2 * * *"     # 10:00 PM ET  - late slate
+    # The gap between the late build and the morning one used to run six hours,
+    # so anyone opening the page in the small hours found the newest slate was
+    # still yesterday's and the Today button appeared to go backwards.
+    - cron: "20 4 * * *"    # 12:20 AM ET  - build the new day as soon as it starts
+    - cron: "0 8 * * *"     #  4:00 AM ET  - grade yesterday, rebuild
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Slate date (YYYY-MM-DD, blank = today)"
+        required: false
+      days:
+        description: "How many days to build (blank = the config default)"
+        required: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: mlb-edge
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Restore upstream cache
+        uses: actions/cache@v4
+        with:
+          path: .cache
+          key: mlb-cache-${{ github.run_id }}
+          restore-keys: mlb-cache-
+
+      # The self-tests report, they do not gate. This dashboard is something you
+      # check every day; a failing assertion should be visible in the log, not a
+      # reason the site stops updating. Read them when a run goes amber.
+      - name: Self-test (pipeline)
+        continue-on-error: true
+        run: python -m tests.test_pipeline
+
+      - name: Self-test (dashboard ledger)
+        continue-on-error: true
+        run: node tests/test_ledger.mjs
+
+      - name: Self-test (staking controls)
+        continue-on-error: true
+        run: node tests/test_staking.mjs
+
+      - name: Self-test (date resolution)
+        continue-on-error: true
+        run: node tests/test_schedule.mjs
+
+      - name: Self-test (browser simulator matches the build engine)
+        continue-on-error: true
+        run: node tests/test_sim.mjs docs/data
+
+      - name: Build slate
+        env:
+          MLB_BANKROLL: ${{ vars.MLB_BANKROLL || '250' }}
+          MLB_SEASON: ${{ vars.MLB_SEASON || '2026' }}
+        run: |
+          python -m pipeline.build \
+            ${{ github.event.inputs.date && format('--date {0}', github.event.inputs.date) || '' }} \
+            ${{ github.event.inputs.days && format('--days {0}', github.event.inputs.days) || '' }}
+
+      - name: Grade yesterday
+        run: python -m pipeline.build --date $(date -u -d 'yesterday' +%F) --days 1 || true
+
+      - name: Commit feed, ledger and prediction history
+        run: |
+          git config user.name  "mlb-edge-bot"
+          git config user.email "actions@users.noreply.github.com"
+          # Naming a path that does not exist makes `git add` fail outright, and
+          # these two are deliberately absent on a fresh repo - which killed the
+          # whole run at the last step, after everything had already worked.
+          mkdir -p docs/data data
+          [ -f data/shadow.json ]      || echo '{"calls":{}}' > data/shadow.json
+          [ -f data/predictions.json ] || echo '{"games":{}}' > data/predictions.json
+          git add -A docs/data data/shadow.json data/predictions.json
+          if git diff --staged --quiet; then
+            echo "nothing changed"
+          else
+            git commit -m "slate: $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git pull --rebase --autostash origin ${{ github.ref_name }} || true
+            git push
+          fi
+
+      - name: What happened
+        if: always()
+        run: |
+          echo "### MLB Edge build" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f docs/data/index.json ]; then
+            python - <<'PY' >> $GITHUB_STEP_SUMMARY
+          import json
+          i = json.load(open("docs/data/index.json"))
+          print(f"- Built for **{i.get('built_for')}** ({i.get('lookahead_days')} days)")
+          print(f"- Server date (ET): {i.get('server_today_et')}")
+          for d, s in sorted((i.get("day_summary") or {}).items()):
+              print(f"  - `{d}` — {s['games']} games, {s['priced']} priced, "
+                    f"{s['plays']} play(s), ${s['staked']:.2f} at risk")
+          PY
+          else
+            echo "- No feed was produced. The build step above is where to look." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      # enablement: true turns Pages on for the repo if it is not on yet.
+      # Without it this step fails with "Get Pages site failed" on a fresh
+      # repo, which reads like the whole build broke when nothing else did.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
